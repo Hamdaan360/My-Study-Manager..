@@ -1,0 +1,7 @@
+{
+  "name": "Hamdaan Studies Pro",
+  "description": "High-performance study management, pomodoro task timer, productivity analytics dashboard, and deadline calendar for high-achieving students.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
