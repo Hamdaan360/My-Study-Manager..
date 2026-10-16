@@ -107,10 +107,87 @@ export default function App() {
   }, [data.dailyReminderEnabled, data.reminderTime, lastNotifiedDate]);
 
   // Generate AI Daily Focus Plan
+  // Generate AI Daily Focus Plan (Supports both backend proxy & offline/GitHub Pages static deployment)
   const handleGenerateDailyPlan = useCallback(async () => {
     setIsAiLoading(true);
+    const today = formatLocalDate();
+
+    const generateClientSidePlan = () => {
+      const incomplete = (data.tasks || []).filter(t => t && t.status !== 'completed');
+      const overdue = incomplete.filter(t => t.dueDate && t.dueDate < today);
+      const dueToday = incomplete.filter(t => t.dueDate === today);
+      const upcoming = incomplete.filter(t => t.dueDate && t.dueDate > today);
+      const prioritized = [...overdue, ...dueToday, ...upcoming];
+
+      let blocks = [];
+      if (prioritized.length > 0) {
+        let currentHour = 9;
+        blocks = prioritized.slice(0, 5).map((t: any) => {
+          const duration = Math.min(90, Math.max(30, t.estimatedMinutes || 60));
+          const slot = `${String(currentHour).padStart(2, '0')}:00 - ${String(currentHour + Math.ceil(duration / 60)).padStart(2, '0')}:00`;
+          currentHour += Math.ceil(duration / 60) + 1;
+          const catName = (data.categories || []).find(c => c.id === t.categoryId)?.name || 'Academic Core';
+          const isOver = t.dueDate < today;
+
+          return {
+            timeSlot: slot,
+            taskId: t.id,
+            subjectName: catName,
+            title: t.title,
+            durationMinutes: duration,
+            urgency: (isOver ? 'CRITICAL' : t.dueDate === today ? 'HIGH' : 'MODERATE') as any,
+            strategyNote: isOver 
+              ? 'Overdue item: Complete high-priority concepts before starting new topics.' 
+              : 'Target deadline focus: Maintain uninterrupted pomodoro flow.'
+          };
+        });
+      } else {
+        blocks = [
+          {
+            timeSlot: '09:00 - 10:30 AM',
+            subjectName: 'Physics',
+            title: 'Physics Wave Optics & Formula Derivations',
+            durationMinutes: 90,
+            urgency: 'HIGH' as any,
+            strategyNote: 'Fresh morning focus: Derive key equations and practice numerical sets.'
+          },
+          {
+            timeSlot: '11:00 - 12:30 PM',
+            subjectName: 'Mathematics 1',
+            title: 'Calculus & Matrices Problem Solving',
+            durationMinutes: 90,
+            urgency: 'HIGH' as any,
+            strategyNote: 'Deep algebraic work: Work through textbook problem sets.'
+          },
+          {
+            timeSlot: '02:00 - 03:15 PM',
+            subjectName: 'Computer Science 1',
+            title: 'C++ Logic Building & Algorithm Coding',
+            durationMinutes: 75,
+            urgency: 'MODERATE' as any,
+            strategyNote: 'Active hands-on coding sprint with timer.'
+          },
+          {
+            timeSlot: '04:00 - 05:00 PM',
+            subjectName: 'Chemistry',
+            title: 'Thermodynamics & Reaction Mechanisms',
+            durationMinutes: 60,
+            urgency: 'MODERATE' as any,
+            strategyNote: 'Review chemical equations and core definitions.'
+          }
+        ];
+      }
+
+      return {
+        summary: `Strategic study schedule for Hamdaan: Physics, Maths 1 & 2, Chemistry, and Computer Science 1 & 2. Ready to input your tasks and assignments to maximize your 9.8 CGPA target.`,
+        totalPlannedMinutes: blocks.reduce((acc, b) => acc + b.durationMinutes, 0),
+        focusBlocks: blocks,
+        highAchieverTip: 'Break heavy derivation & coding tasks into 50-minute deep blocks with 10-minute active recovery breaks.',
+        generatedAt: new Date().toISOString()
+      };
+    };
+
     try {
-      const today = formatLocalDate();
       const res = await fetch('/api/ai/daily-plan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -122,18 +199,23 @@ export default function App() {
         })
       });
 
-      const json = await res.json();
-      if (res.ok && json.success && json.plan) {
-        setDailyFocusPlan({
-          ...json.plan,
-          generatedAt: new Date().toISOString()
-        });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && json.plan) {
+          setDailyFocusPlan({
+            ...json.plan,
+            generatedAt: new Date().toISOString()
+          });
+          setIsAiLoading(false);
+          return;
+        }
       }
     } catch (e) {
-      console.error('Failed to generate daily focus plan', e);
-    } finally {
-      setIsAiLoading(false);
+      console.warn('Backend API skipped or static hosting, using client-side plan generator', e);
     }
+
+    setDailyFocusPlan(generateClientSidePlan());
+    setIsAiLoading(false);
   }, [data.tasks, data.categories, data.goals.dailyTargetHours]);
 
   // Auto-generate focus plan on initial load if not yet generated
