@@ -145,14 +145,14 @@ export default function App() {
 
   // Calculate today's study minutes
   const todayMinutes = useMemo(() => {
-    return data.sessions
-      .filter(s => s.date === todayStr)
-      .reduce((acc, s) => acc + s.durationMinutes, 0);
+    return (data.sessions || [])
+      .filter(s => s && s.date === todayStr)
+      .reduce((acc, s) => acc + (s.durationMinutes || 0), 0);
   }, [data.sessions, todayStr]);
 
   // Pending assignments count
   const pendingAssignmentsCount = useMemo(() => {
-    return data.assignments.filter(a => a.status === 'pending').length;
+    return (data.assignments || []).filter(a => a && a.status === 'pending').length;
   }, [data.assignments]);
 
   // Navigation helper
@@ -479,7 +479,8 @@ export default function App() {
 
   // Currently selected subject for folder view
   const currentCategory = useMemo(() => {
-    return data.categories.find(c => c.id === selectedSubjectId) || data.categories[0];
+    const cats = Array.isArray(data.categories) && data.categories.length > 0 ? data.categories : [];
+    return cats.find(c => c && c.id === selectedSubjectId) || cats[0];
   }, [data.categories, selectedSubjectId]);
 
   return (

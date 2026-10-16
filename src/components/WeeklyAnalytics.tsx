@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   BarChart, 
   Bar, 
@@ -10,7 +10,7 @@ import {
   CartesianGrid, 
   Cell 
 } from 'recharts';
-import { TrendingUp, Flame, Target, Trophy, Clock } from 'lucide-react';
+import { TrendingUp, Flame, Target, Trophy, Clock, BarChart2 } from 'lucide-react';
 import { StudySession } from '../types';
 import { formatLocalDate } from '../utils/storage';
 
@@ -31,13 +31,58 @@ interface DayData {
   metGoal: boolean;
 }
 
+// Custom Glassmorphic Tooltip for Recharts
+const CustomTooltip = ({ active, payload }: any) => {
+  if (active && payload && payload.length > 0 && payload[0]?.payload) {
+    const data = payload[0].payload as DayData;
+    if (!data) return null;
+
+    return (
+      <div className="p-3.5 rounded-2xl bg-slate-900/95 border border-white/20 shadow-2xl text-xs space-y-1.5 min-w-[170px] backdrop-blur-xl">
+        <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
+          <span className="font-bold text-white flex items-center gap-1.5">
+            <span>{data.dayName}</span>
+            <span className="text-slate-400 font-normal">({data.formattedDate})</span>
+          </span>
+          {data.isToday && (
+            <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+              Today
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between pt-0.5">
+          <span className="text-slate-300">Total Focus:</span>
+          <span className="font-mono font-black text-indigo-300 text-sm">{data.hours} hrs</span>
+        </div>
+
+        <div className="flex items-center justify-between text-[11px] text-slate-400">
+          <span>Sessions:</span>
+          <span className="font-mono text-white">{data.sessionsCount} session{data.sessionsCount !== 1 ? 's' : ''}</span>
+        </div>
+
+        <div className="pt-1 border-t border-white/5 flex items-center justify-between text-[11px]">
+          <span className="text-slate-400">Target Goal:</span>
+          <span className={`font-semibold ${data.metGoal ? 'text-emerald-400' : 'text-amber-400'}`}>
+            {data.metGoal ? `✓ Met` : `Pending`}
+          </span>
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
+
 export const WeeklyAnalytics: React.FC<WeeklyAnalyticsProps> = ({
-  sessions,
-  dailyTargetHours,
+  sessions = [],
+  dailyTargetHours = 5,
   weeklyTargetHours = 30
 }) => {
+  const [hoveredDay, setHoveredDay] = useState<DayData | null>(null);
+
   // Generate the last 7 days data
   const { chartData, totalWeeklyHours, dailyAverage, bestDay, goalHitCount } = useMemo(() => {
+    const safeSessions = Array.isArray(sessions) ? sessions : [];
     const data: DayData[] = [];
     const today = new Date();
     const todayStr = formatLocalDate(today);
@@ -52,8 +97,8 @@ export const WeeklyAnalytics: React.FC<WeeklyAnalyticsProps> = ({
       d.setDate(today.getDate() - i);
       const dateStr = formatLocalDate(d);
 
-      const daySessions = sessions.filter(s => s.date === dateStr);
-      const dayMinutes = daySessions.reduce((acc, s) => acc + s.durationMinutes, 0);
+      const daySessions = safeSessions.filter(s => s && s.date === dateStr);
+      const dayMinutes = daySessions.reduce((acc, s) => acc + (s.durationMinutes || 0), 0);
       const dayHours = Number((dayMinutes / 60).toFixed(1));
       const metGoal = dayHours >= dailyTargetHours;
 
@@ -94,46 +139,6 @@ export const WeeklyAnalytics: React.FC<WeeklyAnalyticsProps> = ({
   const maxRecordedHours = Math.max(...chartData.map(d => d.hours), 0);
   const yAxisMax = Math.max(Math.ceil(maxRecordedHours + 1), Math.ceil(dailyTargetHours + 2), 6);
 
-  // Custom Glassmorphic Tooltip
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload as DayData;
-      return (
-        <div className="p-3.5 rounded-2xl glass-panel-elevated border border-white/20 shadow-2xl text-xs space-y-1.5 min-w-[170px]">
-          <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
-            <span className="font-bold text-white flex items-center gap-1.5">
-              <span>{data.dayName}</span>
-              <span className="text-slate-400 font-normal">({data.formattedDate})</span>
-            </span>
-            {data.isToday && (
-              <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                Today
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center justify-between pt-0.5">
-            <span className="text-slate-300">Total Focus:</span>
-            <span className="font-mono font-black text-indigo-300 text-sm">{data.hours} hrs</span>
-          </div>
-
-          <div className="flex items-center justify-between text-[11px] text-slate-400">
-            <span>Sessions:</span>
-            <span className="font-mono text-white">{data.sessionsCount} session{data.sessionsCount !== 1 ? 's' : ''}</span>
-          </div>
-
-          <div className="pt-1 border-t border-white/5 flex items-center justify-between text-[11px]">
-            <span className="text-slate-400">Target Goal:</span>
-            <span className={`font-semibold ${data.metGoal ? 'text-emerald-400' : 'text-amber-400'}`}>
-              {data.metGoal ? `✓ Met (${dailyTargetHours}h)` : `Pending (${(dailyTargetHours - data.hours).toFixed(1)}h left)`}
-            </span>
-          </div>
-        </div>
-      );
-    }
-    return null;
-  };
-
   return (
     <div className="glass-panel-elevated p-6 rounded-3xl border border-white/10 space-y-6">
       
@@ -153,7 +158,7 @@ export const WeeklyAnalytics: React.FC<WeeklyAnalyticsProps> = ({
         </div>
 
         {/* Legend */}
-        <div className="flex items-center gap-4 text-xs">
+        <div className="flex items-center gap-4 text-xs flex-wrap">
           <div className="flex items-center gap-1.5 text-slate-300">
             <span className="w-3 h-3 rounded bg-indigo-500" />
             <span>Study Hours</span>
@@ -207,9 +212,9 @@ export const WeeklyAnalytics: React.FC<WeeklyAnalyticsProps> = ({
         </div>
       </div>
 
-      {/* Recharts Bar Chart Container */}
-      <div className="w-full h-64 pt-2">
-        <ResponsiveContainer width="100%" height="100%">
+      {/* Primary Chart: Recharts BarChart with safe dimensions */}
+      <div className="w-full h-64 pt-2 relative">
+        <ResponsiveContainer width="100%" height={240} minWidth={100} minHeight={200}>
           <BarChart 
             data={chartData} 
             margin={{ top: 20, right: 10, left: -20, bottom: 5 }}
@@ -236,34 +241,24 @@ export const WeeklyAnalytics: React.FC<WeeklyAnalyticsProps> = ({
             />
 
             <Tooltip 
-              content={<CustomTooltip />} 
-              cursor={{ fill: 'rgba(255, 255, 255, 0.04)', radius: 12 }} 
+              content={CustomTooltip} 
+              cursor={{ fill: 'rgba(255, 255, 255, 0.04)' }} 
             />
 
-            {/* Target Goal Dotted Line */}
             <ReferenceLine 
               y={dailyTargetHours} 
               stroke="#10b981" 
               strokeDasharray="4 4" 
               strokeWidth={1.5}
-              label={{ 
-                value: `Goal ${dailyTargetHours}h`, 
-                position: 'right', 
-                fill: '#10b981', 
-                fontSize: 10,
-                fontFamily: 'monospace',
-                fontWeight: 700
-              }} 
             />
 
             <Bar 
               dataKey="hours" 
-              radius={[10, 10, 4, 4]} 
+              radius={[8, 8, 2, 2]} 
               maxBarSize={48}
-              animationDuration={1000}
+              animationDuration={800}
             >
               {chartData.map((entry, index) => {
-                // Color bar green if goal met, vibrant indigo otherwise, with extra pop for today
                 const fillColor = entry.metGoal
                   ? '#10b981' // Emerald
                   : entry.isToday
@@ -282,6 +277,16 @@ export const WeeklyAnalytics: React.FC<WeeklyAnalyticsProps> = ({
             </Bar>
           </BarChart>
         </ResponsiveContainer>
+      </div>
+
+      {/* Target reference indicator tag */}
+      <div className="flex items-center justify-between text-xs text-slate-400 border-t border-white/5 pt-3">
+        <span className="font-mono text-[11px]">
+          Target reference line: <span className="text-emerald-400 font-bold">{dailyTargetHours}.0h daily focus goal</span>
+        </span>
+        <span className="text-[11px] text-slate-400 font-mono">
+          Hover over bars for session breakdowns
+        </span>
       </div>
 
     </div>

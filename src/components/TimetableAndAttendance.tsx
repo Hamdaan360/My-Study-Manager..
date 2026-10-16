@@ -72,13 +72,19 @@ export const TimetableAndAttendance: React.FC<TimetableAndAttendanceProps> = ({
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>(initialDay);
   const [timetableFilter, setTimetableFilter] = useState<'day' | 'all'>('day');
 
+  const safeCategories = Array.isArray(categories) && categories.length > 0 ? categories : [];
+  const safeAttendance = Array.isArray(attendance) ? attendance : [];
+  const safeAttendanceLogs = Array.isArray(attendanceLogs) ? attendanceLogs : [];
+  const safeCollegeTimetable = Array.isArray(collegeTimetable) ? collegeTimetable : [];
+  const safeDayRoutine = Array.isArray(dayRoutine) ? dayRoutine : [];
+
   // Modal states for Timetable slot
   const [isSlotModalOpen, setIsSlotModalOpen] = useState(false);
   const [editingSlot, setEditingSlot] = useState<TimetableSlot | null>(null);
   const [slotDay, setSlotDay] = useState<DayOfWeek>(initialDay);
   const [slotStart, setSlotStart] = useState('09:00');
   const [slotEnd, setSlotEnd] = useState('10:00');
-  const [slotSubjectId, setSlotSubjectId] = useState(categories[0]?.id || 'sub-physics');
+  const [slotSubjectId, setSlotSubjectId] = useState(safeCategories[0]?.id || 'sub-physics');
   const [slotType, setSlotType] = useState<TimetableSlot['type']>('lecture');
   const [slotRoom, setSlotRoom] = useState('');
   const [slotProfessor, setSlotProfessor] = useState('');
@@ -100,11 +106,11 @@ export const TimetableAndAttendance: React.FC<TimetableAndAttendanceProps> = ({
   const [manualTotal, setManualTotal] = useState<number>(0);
   const [manualTarget, setManualTarget] = useState<number>(75);
 
-  const categoryMap = new Map(categories.map(c => [c.id, c]));
+  const categoryMap = new Map(safeCategories.map(c => [c.id, c]));
 
   // Ensure every subject category has an attendance entry
-  const fullAttendance = categories.map(cat => {
-    const existing = attendance.find(a => a.subjectId === cat.id);
+  const fullAttendance = safeCategories.map(cat => {
+    const existing = safeAttendance.find(a => a && a.subjectId === cat.id);
     return existing || {
       subjectId: cat.id,
       totalClasses: 0,

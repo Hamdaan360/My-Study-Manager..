@@ -1,4 +1,4 @@
-import { AppStateData } from '../types';
+import { AppStateData, SubjectCategory } from '../types';
 import { INITIAL_DATA } from '../data/initialData';
 
 const STORAGE_KEY = 'hamdaan_studies_pro_v5_clean';
@@ -12,52 +12,104 @@ export const formatLocalDate = (d: Date = new Date()): string => {
 
 export function getLocalData(): AppStateData {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
     if (raw) {
       const parsed = JSON.parse(raw);
-      // Ensure all categories retain chapters
-      const categories = (parsed.categories || []).map((cat: any) => {
-        const initialCat = INITIAL_DATA.categories.find(c => c.id === cat.id);
-        return {
-          ...cat,
-          chapters: cat.chapters && cat.chapters.length > 0 ? cat.chapters : (initialCat?.chapters || [])
-        };
-      });
 
-      // Normalize theme
-      let theme = parsed.theme;
-      if (theme !== 'dark' && theme !== 'blue' && theme !== 'white') {
-        theme = 'dark';
-      }
+      if (parsed && typeof parsed === 'object') {
+        // Merge categories ensuring all 8 core curriculum subjects exist
+        const parsedCats: any[] = Array.isArray(parsed.categories) ? parsed.categories : [];
+        const categoryMap = new Map<string, any>();
+        
+        // Put parsed first
+        parsedCats.forEach(c => {
+          if (c && c.id) categoryMap.set(c.id, c);
+        });
 
-      return {
-        ...INITIAL_DATA,
-        ...parsed,
-        theme,
-        categories: categories.length > 0 ? categories : INITIAL_DATA.categories,
-        tasks: parsed.tasks || [],
-        assignments: parsed.assignments || [],
-        sessions: parsed.sessions || [],
-        attendance: parsed.attendance && parsed.attendance.length > 0 ? parsed.attendance : INITIAL_DATA.attendance,
-        attendanceLogs: parsed.attendanceLogs || [],
-        collegeTimetable: parsed.collegeTimetable && parsed.collegeTimetable.length > 0 ? parsed.collegeTimetable : INITIAL_DATA.collegeTimetable,
-        dayRoutine: parsed.dayRoutine && parsed.dayRoutine.length > 0 ? parsed.dayRoutine : INITIAL_DATA.dayRoutine,
-        goals: {
-          ...INITIAL_DATA.goals,
-          ...(parsed.goals || {}),
+        // Ensure all INITIAL_DATA categories exist
+        INITIAL_DATA.categories.forEach(initialCat => {
+          const existing = categoryMap.get(initialCat.id);
+          if (!existing) {
+            categoryMap.set(initialCat.id, initialCat);
+          } else {
+            // Guarantee chapters are intact
+            categoryMap.set(initialCat.id, {
+              ...initialCat,
+              ...existing,
+              chapters: Array.isArray(existing.chapters) && existing.chapters.length > 0 
+                ? existing.chapters 
+                : initialCat.chapters
+            });
+          }
+        });
+
+        const mergedCategories: SubjectCategory[] = Array.from(categoryMap.values());
+
+        // Normalize theme ('dark', 'blue', 'white')
+        let theme = parsed.theme;
+        if (theme !== 'dark' && theme !== 'blue' && theme !== 'white') {
+          theme = 'dark';
         }
-      };
+
+        const safeGoals = {
+          dailyTargetHours: Number(parsed.goals?.dailyTargetHours) || INITIAL_DATA.goals.dailyTargetHours,
+          dailyTasksTarget: Number(parsed.goals?.dailyTasksTarget) || INITIAL_DATA.goals.dailyTasksTarget,
+          weeklyTargetHours: Number(parsed.goals?.weeklyTargetHours) || INITIAL_DATA.goals.weeklyTargetHours,
+          streakCount: typeof parsed.goals?.streakCount === 'number' && !isNaN(parsed.goals.streakCount) 
+            ? parsed.goals.streakCount 
+            : 0,
+          longestStreak: typeof parsed.goals?.longestStreak === 'number' && !isNaN(parsed.goals.longestStreak)
+            ? parsed.goals.longestStreak 
+            : 0,
+          lastActiveDate: typeof parsed.goals?.lastActiveDate === 'string' 
+            ? parsed.goals.lastActiveDate 
+            : '',
+        };
+
+        const result: AppStateData = {
+          studentName: parsed.studentName || INITIAL_DATA.studentName,
+          targetGpa: parsed.targetGpa || INITIAL_DATA.targetGpa,
+          universityName: parsed.universityName || INITIAL_DATA.universityName,
+          theme,
+          dailyReminderEnabled: typeof parsed.dailyReminderEnabled === 'boolean' 
+            ? parsed.dailyReminderEnabled 
+            : INITIAL_DATA.dailyReminderEnabled,
+          reminderTime: typeof parsed.reminderTime === 'string' && parsed.reminderTime 
+            ? parsed.reminderTime 
+            : INITIAL_DATA.reminderTime,
+          goals: safeGoals,
+          categories: mergedCategories.length > 0 ? mergedCategories : INITIAL_DATA.categories,
+          tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
+          assignments: Array.isArray(parsed.assignments) ? parsed.assignments : [],
+          sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
+          attendance: Array.isArray(parsed.attendance) && parsed.attendance.length > 0 
+            ? parsed.attendance 
+            : INITIAL_DATA.attendance,
+          attendanceLogs: Array.isArray(parsed.attendanceLogs) ? parsed.attendanceLogs : [],
+          collegeTimetable: Array.isArray(parsed.collegeTimetable) && parsed.collegeTimetable.length > 0 
+            ? parsed.collegeTimetable 
+            : INITIAL_DATA.collegeTimetable,
+          dayRoutine: Array.isArray(parsed.dayRoutine) && parsed.dayRoutine.length > 0 
+            ? parsed.dayRoutine 
+            : INITIAL_DATA.dayRoutine,
+        };
+
+        return result;
+      }
     }
   } catch (e) {
     console.error('Error reading localStorage data', e);
   }
+
   saveLocalData(INITIAL_DATA);
   return INITIAL_DATA;
 }
 
 export function saveLocalData(data: AppStateData): void {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    }
   } catch (e) {
     console.error('Error writing to localStorage', e);
   }
@@ -79,7 +131,7 @@ export function exportBackupJson(data: AppStateData) {
 
 // Export single or all deadlines to .ics for Apple Calendar, Outlook, Google Calendar
 export function exportCalendarIcs(tasks: AppStateData['tasks'], categories: AppStateData['categories']) {
-  const categoryMap = new Map(categories.map(c => [c.id, c]));
+  const categoryMap = new Map((categories || []).map(c => [c.id, c]));
 
   let icsLines = [
     'BEGIN:VCALENDAR',
@@ -93,8 +145,8 @@ export function exportCalendarIcs(tasks: AppStateData['tasks'], categories: AppS
 
   const nowStamp = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
 
-  tasks.forEach(task => {
-    if (!task.dueDate) return;
+  (tasks || []).forEach(task => {
+    if (!task || !task.dueDate) return;
     const cat = categoryMap.get(task.categoryId);
     const dateClean = task.dueDate.replace(/-/g, '');
     const startTime = (task.dueTime ? task.dueTime.replace(':', '') + '00' : '235900');
@@ -105,8 +157,8 @@ export function exportCalendarIcs(tasks: AppStateData['tasks'], categories: AppS
     icsLines.push(`DTSTAMP:${nowStamp}`);
     icsLines.push(`DTSTART:${dtStamp}`);
     icsLines.push(`DTEND:${dtStamp}`);
-    icsLines.push(`SUMMARY:[${cat ? cat.code : 'TASK'}] ${task.title.replace(/[,;]/g, ' ')}`);
-    icsLines.push(`DESCRIPTION:${(task.description || '').replace(/\n/g, '\\n')}\\nPriority: ${task.priority.toUpperCase()}\\nCategory: ${cat?.name || 'General'}`);
+    icsLines.push(`SUMMARY:[${cat ? cat.code : 'TASK'}] ${(task.title || '').replace(/[,;]/g, ' ')}`);
+    icsLines.push(`DESCRIPTION:${(task.description || '').replace(/\n/g, '\\n')}\\nPriority: ${(task.priority || 'MEDIUM').toUpperCase()}\\nCategory: ${cat?.name || 'General'}`);
     icsLines.push(`STATUS:${task.status === 'completed' ? 'COMPLETED' : 'CONFIRMED'}`);
     icsLines.push('END:VEVENT');
   });

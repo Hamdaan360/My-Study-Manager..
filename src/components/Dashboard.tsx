@@ -53,21 +53,29 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onGeneratePlan,
   isAiLoading
 }) => {
+  const safeGoals = data.goals || { dailyTargetHours: 5, dailyTasksTarget: 5, streakCount: 0, longestStreak: 0, weeklyTargetHours: 30, lastActiveDate: '' };
+  const safeSessions = Array.isArray(data.sessions) ? data.sessions : [];
+  const safeTasks = Array.isArray(data.tasks) ? data.tasks : [];
+  const safeCategories = Array.isArray(data.categories) ? data.categories : [];
+  const safeAttendance = Array.isArray(data.attendance) ? data.attendance : [];
+  const safeTimetable = Array.isArray(data.collegeTimetable) ? data.collegeTimetable : [];
+  const safeRoutine = Array.isArray(data.dayRoutine) ? data.dayRoutine : [];
+
   const [showGoalModal, setShowGoalModal] = useState(false);
-  const [tempDailyHours, setTempDailyHours] = useState(data.goals.dailyTargetHours);
-  const [tempDailyTasks, setTempDailyTasks] = useState(data.goals.dailyTasksTarget);
+  const [tempDailyHours, setTempDailyHours] = useState(safeGoals.dailyTargetHours || 5);
+  const [tempDailyTasks, setTempDailyTasks] = useState(safeGoals.dailyTasksTarget || 5);
 
   const todayStr = new Date().toISOString().split('T')[0];
 
   // Calculate today's study minutes
-  const todaySessions = data.sessions.filter(s => s.date === todayStr);
-  const todayMinutes = todaySessions.reduce((acc, s) => acc + s.durationMinutes, 0);
+  const todaySessions = safeSessions.filter(s => s && s.date === todayStr);
+  const todayMinutes = todaySessions.reduce((acc, s) => acc + (s.durationMinutes || 0), 0);
   const todayHours = Number((todayMinutes / 60).toFixed(1));
 
   // Today's tasks & completed count
-  const todayTasks = data.tasks.filter(t => t.dueDate === todayStr || (t.status !== 'completed' && t.dueDate < todayStr));
-  const completedTodayTasks = data.tasks.filter(t => t.completedAt && t.completedAt.startsWith(todayStr));
-  const totalCompletedTasksCount = data.tasks.filter(t => t.status === 'completed').length;
+  const todayTasks = safeTasks.filter(t => t && (t.dueDate === todayStr || (t.status !== 'completed' && t.dueDate < todayStr)));
+  const completedTodayTasks = safeTasks.filter(t => t && t.completedAt && t.completedAt.startsWith(todayStr));
+  const totalCompletedTasksCount = safeTasks.filter(t => t && t.status === 'completed').length;
 
   // Calculate 7-day study history for chart
   const last7Days: { dateStr: string; label: string; hours: number; sessionsCount: number }[] = [];
@@ -77,11 +85,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
     const dateStr = d.toISOString().split('T')[0];
     const dayName = i === 0 ? 'Today' : d.toLocaleDateString('en-US', { weekday: 'short' });
     
-    const dayMinutes = data.sessions
-      .filter(s => s.date === dateStr)
-      .reduce((acc, s) => acc + s.durationMinutes, 0);
+    const dayMinutes = safeSessions
+      .filter(s => s && s.date === dateStr)
+      .reduce((acc, s) => acc + (s.durationMinutes || 0), 0);
 
-    const count = data.sessions.filter(s => s.date === dateStr).length;
+    const count = safeSessions.filter(s => s && s.date === dateStr).length;
 
     last7Days.push({
       dateStr,
@@ -92,10 +100,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
   }
 
   // Max hours in the 7 days for relative chart height
-  const maxChartHours = Math.max(data.goals.dailyTargetHours * 1.25, ...last7Days.map(d => d.hours), 6);
+  const maxChartHours = Math.max((safeGoals.dailyTargetHours || 5) * 1.25, ...last7Days.map(d => d.hours), 6);
 
   // Calculate subject vs college split for this week
-  const weekSessions = data.sessions.filter(s => {
+  const weekSessions = safeSessions.filter(s => {
+    if (!s || !s.date) return false;
     const diffDays = (new Date(todayStr).getTime() - new Date(s.date).getTime()) / (1000 * 3600 * 24);
     return diffDays >= 0 && diffDays <= 7;
   });
@@ -105,11 +114,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
   let collegeMinutes = 0;
 
   weekSessions.forEach(s => {
-    categoryTimeMap.set(s.categoryId, (categoryTimeMap.get(s.categoryId) || 0) + s.durationMinutes);
+    if (!s) return;
+    categoryTimeMap.set(s.categoryId, (categoryTimeMap.get(s.categoryId) || 0) + (s.durationMinutes || 0));
     if (s.categoryType === 'college') {
-      collegeMinutes += s.durationMinutes;
+      collegeMinutes += s.durationMinutes || 0;
     } else {
-      academicMinutes += s.durationMinutes;
+      academicMinutes += s.durationMinutes || 0;
     }
   });
 
@@ -118,18 +128,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const collegePercent = Math.round((collegeMinutes / totalWeekMinutes) * 100);
 
   // Velocity score (0 - 100)
-  const studyHoursScore = Math.min(50, (todayHours / Math.max(1, data.goals.dailyTargetHours)) * 50);
-  const taskCompletionScore = Math.min(30, (completedTodayTasks.length / Math.max(1, data.goals.dailyTasksTarget)) * 30);
-  const streakScore = Math.min(20, (data.goals.streakCount / 10) * 20);
+  const studyHoursScore = Math.min(50, (todayHours / Math.max(1, safeGoals.dailyTargetHours || 5)) * 50);
+  const taskCompletionScore = Math.min(30, (completedTodayTasks.length / Math.max(1, safeGoals.dailyTasksTarget || 5)) * 30);
+  const streakScore = Math.min(20, ((safeGoals.streakCount || 0) / 10) * 20);
   const velocityScore = Math.round(studyHoursScore + taskCompletionScore + streakScore);
 
   // Upcoming urgent deadlines (within 5 days)
-  const upcomingDeadlines = data.tasks
-    .filter(t => t.status !== 'completed' && t.dueDate)
-    .sort((a, b) => (a.dueDate + (a.dueTime || '')).localeCompare(b.dueDate + (b.dueTime || '')))
+  const upcomingDeadlines = safeTasks
+    .filter(t => t && t.status !== 'completed' && t.dueDate)
+    .sort((a, b) => ((a.dueDate || '') + (a.dueTime || '')).localeCompare((b.dueDate || '') + (b.dueTime || '')))
     .slice(0, 4);
 
-  const categoryMap = new Map(data.categories.map(c => [c.id, c]));
+  const categoryMap = new Map(safeCategories.map(c => [c.id, c]));
 
   const handleSaveGoals = (e: React.FormEvent) => {
     e.preventDefault();
@@ -208,16 +218,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <Clock className="w-4 h-4 text-emerald-400" />
                 Today's Focus
               </span>
-              <span className="font-mono text-emerald-400">{Math.round((todayHours / data.goals.dailyTargetHours) * 100)}%</span>
+              <span className="font-mono text-emerald-400">{Math.round((todayHours / Math.max(1, safeGoals.dailyTargetHours || 5)) * 100)}%</span>
             </div>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl sm:text-3xl font-extrabold text-white font-mono">{todayHours}</span>
-              <span className="text-xs text-slate-400 font-mono">/ {data.goals.dailyTargetHours} hrs</span>
+              <span className="text-xs text-slate-400 font-mono">/ {safeGoals.dailyTargetHours || 5} hrs</span>
             </div>
             <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
               <div 
                 className="h-full bg-emerald-400 rounded-full transition-all duration-700"
-                style={{ width: `${Math.min(100, (todayHours / data.goals.dailyTargetHours) * 100)}%` }}
+                style={{ width: `${Math.min(100, (todayHours / Math.max(1, safeGoals.dailyTargetHours || 5)) * 100)}%` }}
               />
             </div>
           </div>
@@ -233,12 +243,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl sm:text-3xl font-extrabold text-white font-mono">{completedTodayTasks.length}</span>
-              <span className="text-xs text-slate-400 font-mono">/ {data.goals.dailyTasksTarget} target</span>
+              <span className="text-xs text-slate-400 font-mono">/ {safeGoals.dailyTasksTarget || 5} target</span>
             </div>
             <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
               <div 
                 className="h-full bg-indigo-500 rounded-full transition-all duration-700"
-                style={{ width: `${Math.min(100, (completedTodayTasks.length / data.goals.dailyTasksTarget) * 100)}%` }}
+                style={{ width: `${Math.min(100, (completedTodayTasks.length / Math.max(1, safeGoals.dailyTasksTarget || 5)) * 100)}%` }}
               />
             </div>
           </div>
@@ -250,10 +260,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <Flame className="w-4 h-4 text-amber-400 fill-amber-400" />
                 Focus Streak
               </span>
-              <span className="text-[11px] text-amber-300 font-mono">Best: {data.goals.longestStreak}d</span>
+              <span className="text-[11px] text-amber-300 font-mono">Best: {safeGoals.longestStreak ?? 0}d</span>
             </div>
             <div className="flex items-baseline gap-2">
-              <span className="text-2xl sm:text-3xl font-extrabold text-amber-400 font-mono">{data.goals.streakCount}</span>
+              <span className="text-2xl sm:text-3xl font-extrabold text-amber-400 font-mono">{safeGoals.streakCount ?? 0}</span>
               <span className="text-xs text-slate-400">Consecutive Days</span>
             </div>
             <div className="text-[11px] text-slate-400 flex items-center gap-1">
@@ -388,9 +398,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* Left 2 Cols: Recharts WeeklyAnalytics Component */}
         <div className="lg:col-span-2">
           <WeeklyAnalytics 
-            sessions={data.sessions}
-            dailyTargetHours={data.goals.dailyTargetHours}
-            weeklyTargetHours={data.goals.weeklyTargetHours}
+            sessions={safeSessions}
+            dailyTargetHours={safeGoals.dailyTargetHours || 5}
+            weeklyTargetHours={safeGoals.weeklyTargetHours || 30}
           />
         </div>
 

@@ -73,12 +73,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isOpenMobile,
   onCloseMobile
 }) => {
-  const academicSubjects = categories.filter(c => c.type === 'subject');
-  const collegeRoles = categories.filter(c => c.type === 'college');
+  const safeCategories = Array.isArray(categories) ? categories : [];
+  const safeTasks = Array.isArray(tasks) ? tasks : [];
+  const safeAssignments = Array.isArray(assignments) ? assignments : [];
+
+  const academicSubjects = safeCategories.filter(c => c && c.type === 'subject');
+  const collegeRoles = safeCategories.filter(c => c && c.type === 'college');
 
   // Helper icon for subjects
   const getSubjectIcon = (iconName: string, name: string) => {
-    const lower = name.toLowerCase();
+    const lower = (name || '').toLowerCase();
     if (lower.includes('phys')) return <Atom className="w-4 h-4" />;
     if (lower.includes('maths 1') || lower.includes('mathematics 1')) return <Sigma className="w-4 h-4" />;
     if (lower.includes('maths 2') || lower.includes('mathematics 2')) return <Binary className="w-4 h-4" />;
@@ -93,10 +97,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const getTaskCountForCat = (catId: string) => {
-    return tasks.filter(t => t.categoryId === catId && t.status !== 'completed').length;
+    return safeTasks.filter(t => t && t.categoryId === catId && t.status !== 'completed').length;
   };
 
-  const pendingAssignmentsCount = assignments.filter(a => a.status === 'pending').length;
+  const pendingAssignmentsCount = safeAssignments.filter(a => a && a.status === 'pending').length;
 
   const themeOptions: { id: AppTheme; label: string; icon: React.ReactNode; colorDesc: string }[] = [
     { id: 'dark', label: 'Dark (Original)', icon: <Moon className="w-3.5 h-3.5 text-indigo-400" />, colorDesc: '#080d1a' },
